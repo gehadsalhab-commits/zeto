@@ -77,6 +77,20 @@
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 8px;
     }
+    .sku-item {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .sku-item input {
+      flex: 1;
+    }
+    .btn.remove {
+      background: #b44b4b;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
     .btn {
       background: var(--accent);
       color: #fff;
@@ -157,8 +171,6 @@
   </main>
 
   <script>
-    const bearerToken = "xg2g1xaeq8bpfpfkklp9uqw615hnwkhu";
-
     const skuListEl = document.getElementById("sku-list");
     const addSkuBtn = document.getElementById("add-sku");
     const processBtn = document.getElementById("process");
@@ -177,11 +189,25 @@
     }
 
     function addSkuInput(value = "") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sku-item";
+
       const input = document.createElement("input");
       input.type = "text";
       input.placeholder = "SKU";
       input.value = value;
-      skuListEl.appendChild(input);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn remove";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", () => {
+        wrapper.remove();
+      });
+
+      wrapper.appendChild(input);
+      wrapper.appendChild(removeBtn);
+      skuListEl.appendChild(wrapper);
     }
 
     addSkuBtn.addEventListener("click", () => addSkuInput());
@@ -269,19 +295,6 @@
       return await blobToDataUrl(finalBlob);
     }
 
-    function cloneRowStyle(sourceRow, targetRow) {
-      targetRow.height = sourceRow.height;
-      sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const targetCell = targetRow.getCell(colNumber);
-        targetCell.style = JSON.parse(JSON.stringify(cell.style || {}));
-        targetCell.numFmt = cell.numFmt;
-        targetCell.alignment = cell.alignment;
-        targetCell.border = cell.border;
-        targetCell.fill = cell.fill;
-        targetCell.font = cell.font;
-      });
-    }
-
     function addImageToCell(worksheet, dataUrl, rowIndex, colIndex) {
       if (!dataUrl) return;
       const imageId = worksheet.workbook.addImage({
@@ -292,7 +305,7 @@
       worksheet.addImage(imageId, {
         tl: { col: colIndex - 1, row: rowIndex - 1 },
         ext: { width: px, height: px },
-        editAs: "twoCell",
+        editAs: "oneCell",
       });
     }
 
@@ -331,16 +344,7 @@
       const columnMap = getColumnMap();
 
       if (skus.length > 1) {
-        worksheet.insertRows(startingRow + 1, Array.from({ length: skus.length - 1 }, () => []), "i");
-      }
-
-      const sourceRow = worksheet.getRow(startingRow);
-      for (let i = 0; i < skus.length; i += 1) {
-        const rowIndex = startingRow + i;
-        const targetRow = worksheet.getRow(rowIndex);
-        if (i > 0) {
-          cloneRowStyle(sourceRow, targetRow);
-        }
+        worksheet.duplicateRow(startingRow, skus.length - 1, true);
       }
 
       setStatus("Fetching product data...");
