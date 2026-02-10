@@ -295,25 +295,6 @@
       return await blobToDataUrl(finalBlob);
     }
 
-    function cloneRowStyle(sourceRow, targetRow) {
-      targetRow.height = sourceRow.height;
-      sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const targetCell = targetRow.getCell(colNumber);
-        targetCell.style = JSON.parse(JSON.stringify(cell.style || {}));
-        targetCell.numFmt = cell.numFmt;
-        targetCell.alignment = cell.alignment;
-        targetCell.border = cell.border;
-        targetCell.fill = cell.fill;
-        targetCell.font = cell.font;
-      });
-    }
-
-    function appendStyledRow(worksheet, sourceRow) {
-      const newRow = worksheet.addRow([]);
-      cloneRowStyle(sourceRow, newRow);
-      return newRow;
-    }
-
     function addImageToCell(worksheet, dataUrl, rowIndex, colIndex) {
       if (!dataUrl) return;
       const imageId = worksheet.workbook.addImage({
@@ -362,6 +343,12 @@
       const startingRow = Math.max(1, parseInt(startingRowEl.value, 10) || 13);
       const columnMap = getColumnMap();
       const sourceRow = worksheet.getRow(startingRow);
+      const maxRow = worksheet.rowCount;
+      const availableRows = maxRow - startingRow + 1;
+      if (skus.length > availableRows) {
+        setStatus("Template does not have enough existing rows. Please add rows in the template.");
+        return;
+      }
 
       setStatus("Fetching product data...");
 
@@ -374,8 +361,8 @@
       }
 
       for (let i = 0; i < products.length; i += 1) {
-        const row = i === 0 ? sourceRow : appendStyledRow(worksheet, sourceRow);
-        const rowIndex = row.number;
+        const rowIndex = startingRow + i;
+        const row = worksheet.getRow(rowIndex);
         const product = products[i];
         const colCValue = `${product.name} ${product.shortDesc}`.trim();
 
