@@ -340,6 +340,15 @@
         return;
       }
 
+      worksheet.pageSetup = {
+        ...worksheet.pageSetup,
+        paperSize: 9,
+        orientation: "portrait",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      };
+
       const startingRow = Math.max(1, parseInt(startingRowEl.value, 10) || 13);
       const columnMap = getColumnMap();
       const sourceRow = worksheet.getRow(startingRow);
@@ -403,4 +412,3 @@
   </script>
 </body>
 </html>
-
