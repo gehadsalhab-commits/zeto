@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SKU Excel Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f3ec;
+      --panel: #fff8ee;
+      --ink: #1f1f1f;
+      --accent: #2a7f62;
+      --accent-2: #c26a2e;
+      --border: #e4d7c6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Georgia", "Times New Roman", serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 20% 20%, #fff3de, #f7f3ec 60%, #efe6d6 100%);
+      min-height: 100vh;
+    }
+    header {
+      padding: 24px 24px 8px 24px;
+      text-align: center;
+    }
+    header h1 {
+      margin: 0 0 8px 0;
+      font-size: 28px;
+      letter-spacing: 0.5px;
+    }
+    header p {
+      margin: 0;
+      font-size: 14px;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      padding: 16px 24px 32px 24px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+    }
+    .card h2 {
+      margin: 0 0 12px 0;
+      font-size: 18px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    label {
+      font-size: 13px;
+    }
+    input[type="text"], input[type="number"] {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #fff;
+      min-width: 120px;
+    }
+    input[type="file"] {
+      padding: 6px 0;
+    }
+    .sku-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn.secondary {
+      background: var(--accent-2);
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .status {
+      font-size: 13px;
+      min-height: 18px;
+    }
+    .download {
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    @media (max-width: 900px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SKU Excel Generator</h1>
+    <p>Upload a template, fetch products, and generate an Excel file with images.</p>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Inputs</h2>
+      <div class="row">
+        <label for="template">Template Upload</label>
+        <input type="file" id="template" accept=".xlsx" />
+      </div>
+      <div class="row actions">
+        <label>SKU Inputs</label>
+        <button id="add-sku" class="btn secondary" type="button">+ Add SKU</button>
+      </div>
+      <div id="sku-list" class="sku-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Settings</h2>
+      <div class="row">
+        <label for="starting-row">Starting Row</label>
+        <input type="number" id="starting-row" value="13" min="1" />
+      </div>
+      <div class="row">
+        <label for="col-a">Column A</label>
+        <input type="text" id="col-a" value="A" maxlength="2" />
+        <label for="col-b">Column B</label>
+        <input type="text" id="col-b" value="B" maxlength="2" />
+        <label for="col-c">Column C</label>
+        <input type="text" id="col-c" value="C" maxlength="2" />
+        <label for="col-d">Column D</label>
+        <input type="text" id="col-d" value="D" maxlength="2" />
+        <label for="col-f">Column F</label>
+        <input type="text" id="col-f" value="F" maxlength="2" />
+      </div>
+      <div class="row actions">
+        <button id="process" class="btn" type="button">Process & Generate</button>
+        <span id="status" class="status"></span>
+      </div>
+      <div id="download" class="download"></div>
+    </section>
+  </main>
+
+  <script>
+    const bearerToken = "xg2g1xaeq8bpfpfkklp9uqw615hnwkhu";
+    const API_BASE = "https://onlineshop.kludi.com";
+    const IMAGE_BASE = "https://onlineshop.kludi.com/media/catalog/product";
+
+    const skuListEl = document.getElementById("sku-list");
+    const addSkuBtn = document.getElementById("add-sku");
+    const processBtn = document.getElementById("process");
+    const statusEl = document.getElementById("status");
+    const downloadEl = document.getElementById("download");
+
+    const startingRowEl = document.getElementById("starting-row");
+    const colAEl = document.getElementById("col-a");
+    const colBEl = document.getElementById("col-b");
+    const colCEl = document.getElementById("col-c");
+    const colDEl = document.getElementById("col-d");
+    const colFEl = document.getElementById("col-f");
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function addSkuInput(value = "") {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "SKU";
+      input.value = value;
+      skuListEl.appendChild(input);
+    }
+
+    addSkuBtn.addEventListener("click", () => addSkuInput());
+
+    addSkuInput();
+
+    function letterToColumn(letter) {
+      const normalized = String(letter || "").trim().toUpperCase();
+      if (!normalized) return 1;
+      let col = 0;
+      for (let i = 0; i < normalized.length; i += 1) {
+        col = col * 26 + (normalized.charCodeAt(i) - 64);
+      }
+      return col;
+    }
+
+    function getColumnMap() {
+      return {
+        a: letterToColumn(colAEl.value || "A"),
+        b: letterToColumn(colBEl.value || "B"),
+        c: letterToColumn(colCEl.value || "C"),
+        d: letterToColumn(colDEl.value || "D"),
+        f: letterToColumn(colFEl.value || "F"),
+      };
+    }
+
+    function getCustomAttribute(item, code) {
+      const attrs = item?.custom_attributes || [];
+      const found = attrs.find((attr) => attr.attribute_code === code);
+      return found ? found.value : "";
+    }
+
+    async function fetchProduct(sku) {
+      const url = `${API_BASE}/rest/V1/products/?searchCriteria[filterGroups][0][filters][0][field]=sku&searchCriteria[filterGroups][0][filters][0][value]=${encodeURIComponent(sku)}&searchCriteria[filterGroups][0][filters][0][condition_type]=eq`;
+      const response = await fetch(url, {
+        headers: bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {},
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch SKU ${sku}: ${response.status}`);
+      }
+      const data = await response.json();
+      const item = data?.items?.[0];
+      if (!item) {
+        throw new Error(`No product found for SKU ${sku}`);
+      }
+      const shortDesc = getCustomAttribute(item, "short_description");
+      const imagePath = getCustomAttribute(item, "image");
+      return {
+        sku: item.sku || sku,
+        name: item.name || "",
+        shortDesc: shortDesc || "",
+        price: item.price ?? "",
+        imageUrl: imagePath ? `${IMAGE_BASE}${imagePath}` : "",
+      };
+    }
+
+    async function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function convertWebpToJpeg(blob) {
+      const imageBitmap = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = imageBitmap.width;
+      canvas.height = imageBitmap.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(imageBitmap, 0, 0);
+      return new Promise((resolve) => {
+        canvas.toBlob((jpegBlob) => resolve(jpegBlob), "image/jpeg", 0.92);
+      });
+    }
+
+    async function fetchImageDataUrl(url) {
+      if (!url) return "";
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const isWebp = blob.type === "image/webp" || url.toLowerCase().endsWith(".webp");
+      const finalBlob = isWebp ? await convertWebpToJpeg(blob) : blob;
+      return await blobToDataUrl(finalBlob);
+    }
+
+    function cloneRowStyle(sourceRow, targetRow) {
+      targetRow.height = sourceRow.height;
+      sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        const targetCell = targetRow.getCell(colNumber);
+        targetCell.style = JSON.parse(JSON.stringify(cell.style || {}));
+        targetCell.numFmt = cell.numFmt;
+        targetCell.alignment = cell.alignment;
+        targetCell.border = cell.border;
+        targetCell.fill = cell.fill;
+        targetCell.font = cell.font;
+      });
+    }
+
+    function addImageToCell(worksheet, dataUrl, rowIndex, colIndex) {
+      if (!dataUrl) return;
+      const imageId = worksheet.workbook.addImage({
+        base64: dataUrl,
+        extension: "jpeg",
+      });
+      const px = Math.round((2 / 2.54) * 96);
+      worksheet.addImage(imageId, {
+        tl: { col: colIndex - 1, row: rowIndex - 1 },
+        ext: { width: px, height: px },
+        editAs: "twoCell",
+      });
+    }
+
+    processBtn.addEventListener("click", async () => {
+      downloadEl.textContent = "";
+      setStatus("Preparing...");
+
+      const templateInput = document.getElementById("template");
+      const file = templateInput.files[0];
+      if (!file) {
+        setStatus("Please upload a template file.");
+        return;
+      }
+
+      const skus = Array.from(skuListEl.querySelectorAll("input"))
+        .map((input) => input.value.trim())
+        .filter(Boolean);
+
+      if (skus.length === 0) {
+        setStatus("Please enter at least one SKU.");
+        return;
+      }
+
+      setStatus("Loading template...");
+
+      const workbook = new ExcelJS.Workbook();
+      const arrayBuffer = await file.arrayBuffer();
+      await workbook.xlsx.load(arrayBuffer);
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        setStatus("Template must have at least one worksheet.");
+        return;
+      }
+
+      const startingRow = Math.max(1, parseInt(startingRowEl.value, 10) || 13);
+      const columnMap = getColumnMap();
+
+      if (skus.length > 1) {
+        worksheet.insertRows(startingRow + 1, Array.from({ length: skus.length - 1 }, () => []), "i");
+      }
+
+      const sourceRow = worksheet.getRow(startingRow);
+      for (let i = 0; i < skus.length; i += 1) {
+        const rowIndex = startingRow + i;
+        const targetRow = worksheet.getRow(rowIndex);
+        if (i > 0) {
+          cloneRowStyle(sourceRow, targetRow);
+        }
+      }
+
+      setStatus("Fetching product data...");
+
+      let products;
+      try {
+        products = await Promise.all(skus.map((sku) => fetchProduct(sku)));
+      } catch (error) {
+        setStatus(error.message || "Failed to fetch products.");
+        return;
+      }
+
+      for (let i = 0; i < products.length; i += 1) {
+        const rowIndex = startingRow + i;
+        const row = worksheet.getRow(rowIndex);
+        const product = products[i];
+        const colCValue = `${product.name} ${product.shortDesc}`.trim();
+
+        row.getCell(columnMap.a).value = i + 1;
+        row.getCell(columnMap.b).value = product.sku;
+        row.getCell(columnMap.c).value = colCValue;
+        row.getCell(columnMap.f).value = product.price;
+
+        if (product.imageUrl) {
+          try {
+            const imageDataUrl = await fetchImageDataUrl(product.imageUrl);
+            addImageToCell(worksheet, imageDataUrl, rowIndex, columnMap.d);
+          } catch (error) {
+            console.warn(`Image fetch failed for ${product.sku}`, error);
+          }
+        }
+      }
+
+      worksheet.eachRow((row) => row.commit());
+
+      setStatus("Generating file...");
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "sku_export.xlsx";
+      link.textContent = "Download generated Excel file";
+      downloadEl.innerHTML = "";
+      downloadEl.appendChild(link);
+
+      setStatus("Done.");
+    });
+  </script>
+</body>
+</html>
